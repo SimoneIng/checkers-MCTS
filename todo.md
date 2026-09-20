@@ -9,7 +9,7 @@
 - [x] Organizzazione cartelle (`src/checkers/`, `include/checkers/`) e creazione del `Makefile` ricorsivo.
 
 ## Fase 1: Logica di Gioco e Regole della Dama Italiana (Move Generation)
-- [ ] Creazione delle Look-up Tables (LUTs) pre-calcolate per spostamenti e catture.
+- [x] Creazione delle Look-up Tables (LUTs) pre-calcolate per spostamenti e catture.
 - [ ] Sviluppo del generatore di mosse legali (Move Generator) operando a bit.
 - [ ] Implementazione dei vincoli e priorità di cattura (obbligo di presa, presa massima, presa con/di maggior valore).
 - [ ] Implementazione funzione `Make Move` (aggiornamenti tramite XOR e promozione a Dama).
