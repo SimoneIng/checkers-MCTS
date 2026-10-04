@@ -10,10 +10,10 @@
 
 ## Fase 1: Logica di Gioco e Regole della Dama Italiana (Move Generation)
 - [x] Creazione delle Look-up Tables (LUTs) pre-calcolate per spostamenti e catture.
-- [ ] Sviluppo del generatore di mosse legali (Move Generator) operando a bit.
-- [ ] Implementazione dei vincoli e priorità di cattura (obbligo di presa, presa massima, presa con/di maggior valore).
-- [ ] Implementazione funzione `Make Move` (aggiornamenti tramite XOR e promozione a Dama).
-- [ ] Implementazione funzione `Unmake Move` per annullare la mossa ripristinando lo stato (senza clonare nodi).
+- [x] Sviluppo del generatore di mosse legali (Move Generator) operando a bit.
+- [x] Implementazione dei vincoli e priorità di cattura (obbligo di presa, presa massima, presa con/di maggior valore).
+- [x] Implementazione funzione `Make Move` (aggiornamenti tramite XOR e promozione a Dama).
+- [x] Implementazione funzione `Unmake Move` per annullare la mossa ripristinando lo stato (senza clonare nodi).
 
 ## Fase 2: Identificazione degli Stati Terminali
 - [ ] Condizioni di Vittoria/Sconfitta (giocatore senza pezzi o bloccato, stallo).
