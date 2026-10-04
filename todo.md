@@ -16,8 +16,8 @@
 - [x] Implementazione funzione `Unmake Move` per annullare la mossa ripristinando lo stato (senza clonare nodi).
 
 ## Fase 2: Identificazione degli Stati Terminali
-- [ ] Condizioni di Vittoria/Sconfitta (giocatore senza pezzi o bloccato, stallo).
-- [ ] Rilevamento della Patta (stallo su mosse ripetute, regola delle 40 mosse senza cattura/avanzamento).
+- [x] Condizioni di Vittoria/Sconfitta (giocatore senza pezzi o bloccato, stallo).
+- [x] Rilevamento della Patta (stallo su mosse ripetute, regola delle 40 mosse senza cattura/avanzamento).
 
 ## Fase 3: Motore Monte Carlo Tree Search (MCTS)
 - [ ] Progettazione della struttura del Nodo MCTS (punteggio `W`, visite `N`, array/lista figli).
