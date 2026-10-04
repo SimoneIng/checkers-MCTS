@@ -53,3 +53,45 @@ L'intera logica geometrica dei confini della scacchiera viene infatti risolta *a
 Quando, durante la partita, il motore interroga la matrice per sapere se una pedina sul bordo sinistro può muoversi a Nord-Ovest, la LUT restituisce direttamente `0` (mossa illegale). Di conseguenza, la successiva operazione bit a bit (`MOVES[sq][dir] & empty_squares`) restituirà rigorosamente `0`, scartando la mossa in modo naturale.
 
 Introdurre ulteriori calcoli con operatori AND e maschere dei bordi all'interno del generatore di mosse significherebbe soltanto sprecare preziosi cicli di clock della CPU per risolvere un problema geometrico che la nostra architettura ha già neutralizzato alla radice.
+
+---
+
+## Il Move Generator e i Salti Multipli (DFS)
+
+La generazione delle mosse si divide in due fasi principali, seguendo l'**obbligo di presa** della Dama Italiana. Inizialmente, il motore cerca tutte le possibili catture. Se ne trova almeno una, la ricerca di spostamenti semplici viene ignorata.
+
+Per calcolare le **catene di prese (salti multipli)**, il Move Generator fa uso di un algoritmo **DFS (Depth-First Search)**. Partendo da una mossa di cattura valida, la funzione si richiama ricorsivamente passando come parametro lo stato delle pedine già mangiate. Questo permette di:
+- Esplorare tutti i rami possibili di una cattura multipla.
+- Evitare di saltare due volte sullo stesso pezzo (tramite maschere bit che rimuovono temporaneamente i pezzi catturati dalla board logica della DFS).
+- Gestire la promozione in tempo reale: nella variante italiana, se una pedina raggiunge l'ultima riga durante una catena di salti, si promuove a Dama e il suo turno termina immediatamente, interrompendo la DFS.
+
+---
+
+## Filtro delle Mosse e Regole della Dama Italiana
+
+La Dama Italiana possiede una delle gerarchie di cattura più rigide e complesse tra le varianti del gioco. Non basta trovare le catture possibili, bisogna scremarle per lasciare solo quelle strettamente legali.
+Il sistema utilizza una funzione di filtro (`filter_moves`) che assegna uno *score* (punteggio) a ogni mossa trovata, scartando tutte quelle che non raggiungono il punteggio massimo.
+
+Il punteggio viene costruito bit a bit in un singolo intero, garantendo le seguenti priorità in ordine decrescente:
+1. **Quantità massima di pezzi catturati** (Bit 24-31).
+2. **Qualità del pezzo catturante** (Bit 23): A parità di prede, una Dama *deve* mangiare al posto di una pedina.
+3. **Quantità di Dame catturate** (Bit 16-22): A parità di prede e di pezzo catturante, si deve scegliere il percorso che mangia più Dame.
+4. **Precedenza temporale** (Bit 0-7): A parità di tutto il resto, la Dama avversaria deve essere catturata il prima possibile durante la sequenza di salti.
+
+Questo approccio bit a bit evita innumerevoli e complessi cicli condizionali, risolvendo l'intera gerarchia con un rapido confronto intero (`score > best_score`).
+
+---
+
+## Make Move e Unmake Move (XOR Logic)
+
+Un motore MCTS esplora l'albero di gioco applicando e annullando milioni di mosse al secondo. Allocare un nuovo nodo o copiare l'intera board per ogni stato sarebbe fatale per le performance (ecco perché non si usano `malloc` o cloni della struttura).
+
+La soluzione risiede nell'utilizzo dell'operatore **XOR (`^`)**. 
+XOR ha una proprietà matematica fondamentale: applicarlo due volte di seguito con lo stesso valore annulla l'operazione (`A ^ B ^ B = A`).
+
+La funzione `apply_move_xor` esegue sia il *Make Move* che l'*Unmake Move* utilizzando lo stesso identico codice:
+- Esegue uno XOR tra le posizioni `from` e `to` per muovere il pezzo.
+- Esegue uno XOR con la maschera dei pezzi catturati (`captured_men | captured_kings`) per farli "sparire" (durante il Make) e farli "riapparire" (durante l'Unmake).
+- Esegue uno XOR per assegnare o rimuovere la corona in caso di promozione a Dama.
+
+Grazie a questa simmetria perfetta, il motore può scendere in profondità nell'albero (Make Move) e poi risalire ripristinando lo stato esatto (Unmake Move) senza dover salvare la board precedente, garantendo una velocità di esecuzione estrema.
