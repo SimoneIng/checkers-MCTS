@@ -2,52 +2,81 @@
 #include "checkers/move_tables.h"
 #include "checkers/move_generator.h"
 #include "checkers/game_state.h"
+#include "mcts/mcts_anytime.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 void print_status(GameStatus status) {
     switch(status) {
         case ONGOING: printf("Stato: Partita in corso...\n"); break;
-        case WHITE_WINS: printf("Stato: VITTORIA BIANCO! (Il Nero non ha mosse o pezzi)\n"); break;
-        case BLACK_WINS: printf("Stato: VITTORIA NERO! (Il Bianco è senza pezzi o BLOCCATO in stallo)\n"); break;
-        case DRAW: printf("Stato: PATTA (Stallo euristico / 40 Mosse)!\n"); break;
+        case WHITE_WINS: printf("VITTORIA BIANCO!\n"); break;
+        case BLACK_WINS: printf("VITTORIA NERO!\n"); break;
+        case DRAW: printf("PATTA (Stallo euristico / 40 Mosse)!\n"); break;
     }
 }
 
 int main() {
-    Bitboard board;
+    // Inizializza il seed randomico per i rollout
+    srand((unsigned int)time(NULL));
     
     printf("Inizializzazione delle tabelle di lookup...\n");
     init_move_tables();
 
-    // Creiamo uno scenario di stallo (blocco totale).
-    // Il Bianco ha una sola pedina intrappolata nell'angolo (casella 0).
-    // Il Nero ha pedine in 4, 8, 9, 10.
-    // Tocca al Nero, che muovendo chiuderà l'unica via di fuga del Bianco.
-    board.white_pieces = (1U << 0);
-    board.black_pieces = (1U << 4) | (1U << 8) | (1U << 9) | (1U << 10);
-    board.kings = 0;
+    // Alloca 2 Milioni di nodi per il MCTS
+    mcts_pool_init(2000000);
+
+    Bitboard board;
+    bitboard_init(&board);
+    
+    int current_player = 1; // Inizia il Bianco (1)
+    int half_moves = 0;
+    int turn_number = 1;
 
     printf("\n--- SCACCHIERA INIZIALE ---\n");
     bitboard_print(&board);
     
-    // Turno del Nero: muove la pedina da 10 a 5.
-    // Questo blocca la casella 5. E il salto (da 0 oltre 5 fino a 9) è bloccato dalla pedina nera in 9.
-    printf("\n[Turno del Nero] Mossa: pedina da 10 a 5\n");
-    Move m = { .from = 10, .to = 5, .is_promotion = 0, .path_score = 0, .captured_men = 0, .captured_kings = 0 };
-    make_move(&board, &m, 0); // 0 indica che muove il Nero
-    
-    printf("\n--- SCACCHIERA DOPO LA MOSSA ---\n");
-    bitboard_print(&board);
-    
-    // Ora tocca al Bianco. Verifichiamo quante mosse legali ha a disposizione.
-    printf("\n--- CONTROLLO FINE PARTITA (Turno del Bianco) ---\n");
-    MoveList list;
-    generate_moves(&board, 1, &list);
-    printf("Mosse legali trovate per il Bianco: %d\n", list.count);
-    
-    // Chiamiamo il modulo game_state per vedere se rileva la sconfitta per stallo
-    GameStatus status = check_game_status(&board, 1, 0);
-    print_status(status);
+    // Configurazione del bot
+    double time_limit = 0.2; // mezzo secondo a mossa (dà il ritmo all'animazione)
+    float exploration_c = 1.414f; 
+    SelectionPolicy policy = POLICY_UCB1;
 
+    while (1) {
+        // Pulisce il terminale (sequenza ANSI standard) posizionando il cursore in alto
+        printf("\033[H\033[J");
+        
+        GameStatus status = check_game_status(&board, current_player, half_moves);
+        if (status != ONGOING) {
+            printf("\n\n===== PARTITA TERMINATA =====\n");
+            print_status(status);
+            bitboard_print(&board);
+            break;
+        }
+        
+        printf("\n--- TURNO %d : TOCCA AL %s ---\n", turn_number, current_player == 1 ? "BIANCO" : "NERO");
+        bitboard_print(&board);
+        fflush(stdout); // Forza la stampa a video per evitare buffering
+        
+        Move best_move;
+        uint32_t iterations = mcts_get_best_move_anytime(&board, current_player, time_limit, policy, exploration_c, &best_move);
+        
+        printf("MCTS ha eseguito %u rollout in %.1f sec.\n", iterations, time_limit);
+        printf("Mossa scelta: da %d a %d (promozione: %d, catturate: %u)\n", 
+               best_move.from, best_move.to, best_move.is_promotion, __builtin_popcount(best_move.captured_men | best_move.captured_kings));
+        
+        // Applica mossa
+        if (best_move.captured_men > 0 || best_move.captured_kings > 0 || best_move.is_promotion) {
+            half_moves = 0;
+        } else {
+            half_moves++;
+        }
+        
+        make_move(&board, &best_move, current_player);
+        
+        current_player = !current_player; // Passaggio turno
+        if (current_player == 1) turn_number++; // Incrementa il turno reale (turno completo B+N)
+    }
+
+    mcts_pool_free();
     return 0;
 }
