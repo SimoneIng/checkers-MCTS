@@ -20,16 +20,16 @@
 - [x] Rilevamento della Patta (stallo su mosse ripetute, regola delle 40 mosse senza cattura/avanzamento).
 
 ## Fase 3: Motore Monte Carlo Tree Search (MCTS)
-- [ ] Progettazione della struttura del Nodo MCTS (punteggio `W`, visite `N`, array/lista figli).
-- [ ] Sviluppo di un **Memory Pool** pre-allocato per minimizzare i tempi di `malloc/free` durante le allocazioni dei nodi.
-- [ ] Fase 1: **Selection** (Implementazione formula UCB1 e sue varianti es. PUCT).
-- [ ] Fase 2: **Expansion** (Istanziazione e collegamento nuovi figli).
-- [ ] Fase 3: **Simulation / Rollout** (Svolgimento della partita fino a fine gioco).
-- [ ] Fase 4: **Backpropagation** (Aggiornamento dei rami percorsi).
+- [x] Progettazione della struttura del Nodo MCTS (punteggio `W`, visite `N`, array/lista figli).
+- [x] Sviluppo di un **Memory Pool** pre-allocato per minimizzare i tempi di `malloc/free` durante le allocazioni dei nodi.
+- [x] Fase 1: **Selection** (Implementazione formula UCB1 e sue varianti es. PUCT).
+- [x] Fase 2: **Expansion** (Istanziazione e collegamento nuovi figli).
+- [x] Fase 3: **Simulation / Rollout** (Svolgimento della partita fino a fine gioco).
+- [x] Fase 4: **Backpropagation** (Aggiornamento dei rami percorsi).
 
 ## Fase 4: Ottimizzazioni per il Rollout e Tempi (Anytime)
-- [ ] Applicazione di euristiche leggere per tagliare (cut-off) i Rollout inconcludenti e guidare le fasi finali fisse (es. Dama vs Dama = Patta certa).
-- [ ] Implementazione algoritmo *Anytime* (gestione limite di tempo fisso 0.2s, 1s, 3s senza budget di iterazioni).
+- [x] Applicazione di euristiche leggere per tagliare (cut-off) i Rollout inconcludenti e guidare le fasi finali fisse (es. Dama vs Dama = Patta certa).
+- [x] Implementazione algoritmo *Anytime* (gestione limite di tempo fisso 0.2s, 1s, 3s senza budget di iterazioni).
 
 ## Fase 5: Interfaccia Grafica e Input Giocatore
 - [ ] Scelta e setup della libreria grafica in C (SDL2, Raylib o equivalenti).
