@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --color-board-dark: #634B36; /* Marrone scuro */
+  --color-board-light: #E0C7A8; /* Beige */
+}
+
+/* Stili aggiuntivi opzionali */
+body {
+  background-color: #f3f4f6;
+}

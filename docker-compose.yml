@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  wasm-builder:
+    image: emscripten/emsdk:latest
+    volumes:
+      - .:/src
+    command: >
+      emcc 
+      src/checkers/bitboard.c 
+      src/checkers/move_tables.c 
+      src/checkers/move_generator.c 
+      src/checkers/game_state.c 
+      src/mcts/mcts.c 
+      src/mcts/mcts_anytime.c 
+      src/wasm_api.c
+      -Iinclude
+      -O3
+      -s WASM=1
+      -s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'UTF8ToString']"
+      -s ALLOW_MEMORY_GROWTH=1
+      -o web/public/wasm/engine.js

@@ -31,11 +31,11 @@
 - [x] Applicazione di euristiche leggere per tagliare (cut-off) i Rollout inconcludenti e guidare le fasi finali fisse (es. Dama vs Dama = Patta certa).
 - [x] Implementazione algoritmo *Anytime* (gestione limite di tempo fisso 0.2s, 1s, 3s senza budget di iterazioni).
 
-## Fase 5: Interfaccia Grafica e Input Giocatore
-- [ ] Scelta e setup della libreria grafica in C (SDL2, Raylib o equivalenti).
-- [ ] Rendering della finestra, della scacchiera e delle pedine tramite assets/forme.
-- [ ] Gestione degli input utente (click/drag del mouse per gli spostamenti umani).
-- [ ] Integrazione del ciclo di eventi UI con il motore logico dell'AP in background.
+## Fase 5: Interfaccia Grafica e Input Giocatore (WebAssembly + React)
+- [x] Scelta e setup del framework UI (WebAssembly + React + Vite).
+- [x] Rendering della finestra, della scacchiera e delle pedine tramite Tailwind CSS.
+- [x] Gestione degli input utente (click validati con le regole del C) e suoni.
+- [x] Integrazione del ciclo di eventi UI con il motore logico dell'AP in background.
 
 ## Fase 6: Tuning degli Iperparametri e Analisi Sperimentale
 - [ ] Automazione dei match (Tornei Round-robin o Algoritmi Genetici) tra AP con valori di costanti di esplorazione differenti.
