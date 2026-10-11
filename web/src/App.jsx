@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import './index.css';
 
 function App() {
-  const [timeLimit, setTimeLimit] = useState(0.5);
+  const [difficulty, setDifficulty] = useState('Medio');
+  const [timeLimit, setTimeLimit] = useState(1.0);
   const [policy, setPolicy] = useState(0); 
   const [explorationC, setExplorationC] = useState(1.414);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   
   // Game State
   const [boardState, setBoardState] = useState({ white: 0, black: 0, kings: 0, turn: 1, status: 0 });
@@ -17,6 +19,15 @@ function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(true);
   const [lastMove, setLastMove] = useState({ from: null, to: null, captures: 0 });
   const [forcedCaptureSquares, setForcedCaptureSquares] = useState([]);
+  const [moveHistory, setMoveHistory] = useState([]);
+
+  const applyDifficulty = (level) => {
+    setDifficulty(level);
+    if (level === 'Facile') { setTimeLimit(0.2); setPolicy(0); setExplorationC(1.0); }
+    else if (level === 'Medio') { setTimeLimit(1.0); setPolicy(0); setExplorationC(1.414); }
+    else if (level === 'Difficile') { setTimeLimit(1.0); setPolicy(1); setExplorationC(1.414); }
+    else if (level === 'Gran Maestro') { setTimeLimit(3.0); setPolicy(1); setExplorationC(1.5); }
+  };
 
   // Effetti Sonori
   const playSound = (isCapture) => {
@@ -50,7 +61,6 @@ function App() {
       if (window.Module && window.Module._init_engine) {
         clearInterval(checkModule);
         window.Module._init_engine();
-        // Set the board visually but don't "start" the bot yet
         window.Module._start_game();
         syncBoardFromEngine();
         setIsEngineReady(true);
@@ -86,6 +96,7 @@ function App() {
   const startNewGame = () => {
     window.Module._start_game();
     setLastMove({ from: null, to: null, captures: 0 });
+    setMoveHistory([]);
     syncBoardFromEngine();
     setSelectedSquare(null);
     setIsMenuOpen(false); // Chiudi il menu
@@ -103,6 +114,11 @@ function App() {
         
         setLastMove({ from, to, captures: caps });
         playSound(caps > 0);
+        
+        setMoveHistory(prev => [{
+            player: 'Bot',
+            from, to, caps
+        }, ...prev]);
         
         syncBoardFromEngine();
       }, 100); 
@@ -125,13 +141,17 @@ function App() {
         const caps = res >> 16;
         setLastMove({ from: selectedSquare, to: idx, captures: caps });
         playSound(caps > 0);
+        
+        setMoveHistory(prev => [{
+            player: 'Tu',
+            from: selectedSquare, to: idx, caps
+        }, ...prev]);
+
         syncBoardFromEngine();
         setSelectedSquare(null); 
       } else {
-        // Se l'utente ha cliccato una casella non valida, verifichiamo se voleva cliccare un pallino intermedio
         const isIntermediate = getTargetDots().has(idx);
         if (isIntermediate) {
-          // Ignora il click per non far perdere la selezione (l'utente capirà di dover cliccare quello finale)
           return;
         }
         setSelectedSquare(null);
@@ -139,8 +159,6 @@ function App() {
     }
   };
 
-  // ---- LOGICA UI PER SALTI MULTIPLI ----
-  // Trova le caselle intermedie geometriche di un salto multiplo (DFS semplice)
   const findIntermediateSquares = (start, end, caps, isWhite) => {
     if (caps <= 1) return [];
     
@@ -186,8 +204,6 @@ function App() {
         
         if (midIdx !== -1 && landIdx !== -1) {
           if (isOpponent(midIdx) && (isEmpty(landIdx) || landIdx === end)) {
-            // Per evitare loop infiniti nei re, potremmo tenere traccia dei mangiati
-            // ma per una profondità massima di 3-4 salti, va bene così per la UI.
             path.push(landIdx);
             if (dfs(landIdx, currentCaps + 1, path)) return true;
             path.pop();
@@ -198,7 +214,7 @@ function App() {
     };
 
     dfs(start, 0, []);
-    return foundPath.slice(0, -1); // Rimuove l'endIdx finale dalla lista degli intermedi
+    return foundPath.slice(0, -1);
   };
 
   const getTargetDots = () => {
@@ -221,13 +237,21 @@ function App() {
   };
 
   const activeDots = getTargetDots();
+  
+  const countBits = (n) => n.toString(2).split('1').length - 1;
+  const whitePiecesCount = countBits(boardState.white);
+  const blackPiecesCount = countBits(boardState.black);
+  
+  // L'utente gioca con il bianco (inizia con 12), il bot con il nero (inizia con 12)
+  const capturedByHuman = 12 - blackPiecesCount;
+  const capturedByBot = 12 - whitePiecesCount;
 
   return (
     <div className="flex flex-col items-center justify-center h-screen w-full bg-gray-100 font-sans relative overflow-hidden">
       
       {/* Intestazione e Bottone Menu */}
-      <div className="absolute top-6 flex justify-between items-center w-full max-w-2xl px-4 z-10">
-        <h1 className="text-4xl font-black text-gray-800 tracking-widest drop-shadow-sm opacity-90">MCTS CHECKERS</h1>
+      <div className="absolute top-4 lg:top-6 flex justify-between items-center w-full max-w-6xl px-4 z-10">
+        <h1 className="text-3xl lg:text-4xl font-black text-gray-800 tracking-widest drop-shadow-sm opacity-90">MCTS CHECKERS</h1>
         <button 
           onClick={() => setIsMenuOpen(true)}
           className="bg-white/50 hover:bg-white text-gray-700 p-3 rounded-full backdrop-blur-md transition-all shadow-sm border border-gray-300"
@@ -249,9 +273,9 @@ function App() {
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 border border-white/50"
+              className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 border border-white/50 max-h-[90vh] overflow-y-auto"
             >
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <h2 className="text-3xl font-bold text-gray-800">Impostazioni</h2>
                 <p className="text-sm text-green-600 font-semibold mt-1">
                   {isEngineReady ? "Motore C WebAssembly Connesso 🟢" : "Inizializzazione Motore... ⏳"}
@@ -259,57 +283,91 @@ function App() {
               </div>
 
               <div className="flex flex-col gap-6">
+                
+                {/* Selettore Difficoltà Semplificato */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-gray-700">Algoritmo di Selezione</label>
-                  <div className="flex bg-gray-100 rounded-lg p-1">
-                    <button onClick={() => setPolicy(0)} className={`flex-1 py-2 rounded-md font-medium text-sm transition-all ${policy === 0 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>UCB1 (Classico)</button>
-                    <button onClick={() => setPolicy(1)} className={`flex-1 py-2 rounded-md font-medium text-sm transition-all ${policy === 1 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>PUCT (AlphaGo)</button>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-semibold text-gray-700">Tempo del Bot per mossa</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[0.2, 1.0, 3.0].map((t) => (
-                      <button key={t} onClick={() => setTimeLimit(t)} className={`py-2 rounded-lg font-bold transition-all border ${timeLimit === t ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm ring-1 ring-blue-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{t}s</button>
+                  <label className="text-sm font-semibold text-gray-700">Difficoltà Bot</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Facile', 'Medio', 'Difficile', 'Gran Maestro'].map(level => (
+                      <button 
+                        key={level}
+                        onClick={() => applyDifficulty(level)}
+                        className={`py-2 px-1 rounded-lg font-bold transition-all border text-sm ${difficulty === level ? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm ring-1 ring-blue-400' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        {level}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-sm font-semibold text-gray-700">Costante di Esplorazione</label>
-                    <span className="text-sm font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded-md">{explorationC.toFixed(2)}</span>
-                  </div>
-                  <input type="range" min="0.1" max="3.0" step="0.1" value={explorationC} onChange={(e) => setExplorationC(Number(e.target.value))} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                <div className="border-t border-gray-100 pt-2">
+                  <button onClick={() => setShowAdvanced(!showAdvanced)} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+                    {showAdvanced ? "Nascondi Avanzate" : "Mostra Avanzate"}
+                    <svg className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </button>
+                  
+                  {showAdvanced && (
+                    <div className="mt-4 flex flex-col gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold text-gray-600">Algoritmo di Selezione</label>
+                        <div className="flex bg-gray-200 rounded-lg p-1">
+                          <button onClick={() => setPolicy(0)} className={`flex-1 py-1 rounded-md font-medium text-xs transition-all ${policy === 0 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'}`}>UCB1</button>
+                          <button onClick={() => setPolicy(1)} className={`flex-1 py-1 rounded-md font-medium text-xs transition-all ${policy === 1 ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'}`}>PUCT</button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-semibold text-gray-600">Tempo per mossa (s)</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[0.2, 1.0, 3.0].map((t) => (
+                            <button 
+                              key={t} 
+                              onClick={() => setTimeLimit(t)} 
+                              className={`py-1 rounded-md font-bold transition-all border text-xs ${timeLimit === t ? 'bg-white border-blue-400 text-blue-700 shadow-sm ring-1 ring-blue-400' : 'bg-gray-200 border-transparent text-gray-600 hover:bg-gray-300'}`}
+                            >
+                              {t}s
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs font-semibold text-gray-600">Costante Esplorazione</label>
+                          <span className="text-xs font-mono bg-blue-100 text-blue-800 px-2 py-0.5 rounded">{explorationC.toFixed(2)}</span>
+                        </div>
+                        <input type="range" min="0.1" max="3.0" step="0.1" value={explorationC} onChange={(e) => setExplorationC(Number(e.target.value))} className="w-full h-1 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Bottoni Azione */}
-              <div className="mt-8 flex flex-col gap-3">
+              <div className="mt-6 flex flex-col gap-3">
                 <button 
                   onClick={startNewGame} 
                   disabled={!isEngineReady}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-4 rounded-xl shadow-lg transition-transform transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-400 text-white font-bold py-3 rounded-xl shadow-lg transition-transform transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"></path></svg>
                   {isEngineReady ? "Inizia Nuova Partita" : "Attendere..."}
                 </button>
 
                 {isEngineReady && boardState.status === 0 && (
-                  <div className="flex gap-3">
+                  <div className="flex gap-2">
                     <button 
                       onClick={() => setIsMenuOpen(false)} 
-                      className="flex-1 bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700 font-bold py-3 rounded-xl shadow-sm transition-transform transform hover:scale-[1.02] active:scale-95"
+                      className="flex-1 bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700 font-bold py-2 rounded-xl shadow-sm transition-transform transform hover:scale-[1.02] active:scale-95"
                     >
                       Riprendi
                     </button>
                     <button 
                       onClick={() => {
-                        setBoardState(prev => ({ ...prev, status: 2 })); // Forza la vittoria del bot
+                        setBoardState(prev => ({ ...prev, status: 2 }));
                         setIsMenuOpen(false);
                       }} 
-                      className="flex-1 bg-white border-2 border-red-100 hover:bg-red-50 text-red-600 font-bold py-3 rounded-xl shadow-sm transition-transform transform hover:scale-[1.02] active:scale-95"
+                      className="flex-1 bg-white border-2 border-red-100 hover:bg-red-50 text-red-600 font-bold py-2 rounded-xl shadow-sm transition-transform transform hover:scale-[1.02] active:scale-95"
                     >
                       Abbandona
                     </button>
@@ -327,84 +385,141 @@ function App() {
           <motion.div 
             initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute top-24 z-20 w-full max-w-md"
+            className="absolute top-20 z-20 w-full max-w-md"
           >
-            <div className={`p-4 rounded-2xl shadow-2xl text-center border-2 backdrop-blur-md font-bold text-2xl
-              ${boardState.status === 1 ? 'bg-green-500/80 border-green-400 text-white' : 
-                boardState.status === 2 ? 'bg-red-500/80 border-red-400 text-white' : 
-                'bg-yellow-500/80 border-yellow-400 text-white'}`}
+            <div className={`p-4 rounded-2xl shadow-2xl text-center border-2 backdrop-blur-md font-bold text-xl lg:text-2xl
+              ${boardState.status === 1 ? 'bg-green-500/90 border-green-400 text-white' : 
+                boardState.status === 2 ? 'bg-red-500/90 border-red-400 text-white' : 
+                'bg-yellow-500/90 border-yellow-400 text-white'}`}
             >
-              {boardState.status === 1 ? "🎉 VITTORIA EROICA!" : boardState.status === 2 ? "💀 SEI STATO DISTRUTTO" : "🤝 PATTA INEVITABILE"}
-              <button onClick={() => setIsMenuOpen(true)} className="block w-full mt-4 text-sm bg-white/20 hover:bg-white/30 py-2 rounded-xl transition-colors">Visualizza Menu</button>
+              {boardState.status === 1 ? "🎉 VITTORIA EROICA!" : boardState.status === 2 ? "Hai perso" : "🤝 PATTA INEVITABILE"}
+              <button onClick={() => setIsMenuOpen(true)} className="block w-full mt-3 text-sm bg-white/20 hover:bg-white/30 py-2 rounded-xl transition-colors">Visualizza Menu</button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* AREA DI GIOCO */}
-      <div className={`w-full max-w-2xl aspect-square shadow-2xl border-4 border-[#3e2723] rounded-sm grid grid-cols-8 grid-rows-8 transition-all duration-500 ${isMenuOpen ? 'blur-sm scale-95 opacity-50' : 'blur-0 scale-100'}`}>
+
+      <div className={`flex flex-col lg:flex-row gap-6 items-center lg:items-start justify-center w-full max-w-6xl px-4 mt-16 transition-all duration-500 ${isMenuOpen ? 'blur-sm scale-95 opacity-50' : 'blur-0 scale-100'}`}>
         
-        {Array.from({ length: 64 }).map((_, i) => {
-          const row = Math.floor(i / 8);
-          const col = i % 8;
-          const logicRow = 7 - row;
-          const isDark = (logicRow + col) % 2 === 0;
+        {/* AREA DI GIOCO */}
+        <div className="w-full max-w-[350px] sm:max-w-md lg:max-w-2xl aspect-square shadow-2xl border-4 border-[#3e2723] rounded-sm grid grid-cols-8 grid-rows-8 flex-shrink-0">
           
-          let squareIdx = null;
-          let content = null;
-          let isForced = false;
-
-          if (isDark) {
-            squareIdx = logicRow * 4 + Math.floor(col / 2);
-            const mask = 1 << squareIdx;
-            const hasWhite = (boardState.white & mask) !== 0;
-            const hasBlack = (boardState.black & mask) !== 0;
-            const isKing = (boardState.kings & mask) !== 0;
+          {Array.from({ length: 64 }).map((_, i) => {
+            const row = Math.floor(i / 8);
+            const col = i % 8;
+            const logicRow = 7 - row;
+            const isDark = (logicRow + col) % 2 === 0;
             
-            isForced = forcedCaptureSquares.includes(squareIdx);
-            const isDoubleCaptureAnim = lastMove.to === squareIdx && lastMove.captures > 1;
+            let squareIdx = null;
+            let content = null;
+            let isForced = false;
 
-            if (hasWhite) {
-              content = (
-                <div className={`w-[80%] h-[80%] rounded-full bg-white shadow-[0_4px_6px_rgba(0,0,0,0.5),_inset_0_-4px_0_rgba(200,200,200,0.6)] border border-gray-300 flex items-center justify-center transition-transform duration-300 z-10 ${isDoubleCaptureAnim ? 'animate-bounce' : ''}`}>
-                  {isKing && <div className="w-1/2 h-1/2 rounded-full border-[5px] border-gray-300"></div>}
-                </div>
-              );
-            } else if (hasBlack) {
-              content = (
-                <div className={`w-[80%] h-[80%] rounded-full bg-gray-900 shadow-[0_4px_6px_rgba(0,0,0,0.7),_inset_0_-4px_0_rgba(60,60,60,0.8)] border border-black flex items-center justify-center transition-transform duration-300 z-10 ${isDoubleCaptureAnim ? 'animate-bounce' : ''}`}>
-                  {isKing && <div className="w-1/2 h-1/2 rounded-full border-[5px] border-gray-600"></div>}
-                </div>
-              );
-            }
-          }
-
-          const isSelected = selectedSquare === squareIdx;
-          const hasDot = activeDots.has(squareIdx);
-
-          // Pallino in stile chess.com
-          let dot = null;
-          if (hasDot) {
-            dot = <div className="absolute w-[30%] h-[30%] rounded-full bg-white/70 z-20 pointer-events-none"></div>;
-          }
-
-          return (
-            <div 
-              key={i} 
-              onClick={() => isDark && handleSquareClick(squareIdx)}
-              className={`w-full h-full flex items-center justify-center relative
-                ${isDark ? 'bg-[#8B4513] cursor-pointer' : 'bg-white'}
-                ${isForced && !isSelected ? 'ring-inset ring-4 ring-red-500 animate-pulse' : ''}
-              `}
-            >
-              {/* Highlight giallo quando selezionata (sovrapposto al colore base) */}
-              {isSelected && isDark && <div className="absolute inset-0 bg-yellow-400/50 z-0 pointer-events-none"></div>}
+            if (isDark) {
+              squareIdx = logicRow * 4 + Math.floor(col / 2);
+              const mask = 1 << squareIdx;
+              const hasWhite = (boardState.white & mask) !== 0;
+              const hasBlack = (boardState.black & mask) !== 0;
+              const isKing = (boardState.kings & mask) !== 0;
               
-              {content}
-              {dot}
+              isForced = forcedCaptureSquares.includes(squareIdx);
+              const isDoubleCaptureAnim = lastMove.to === squareIdx && lastMove.captures > 1;
+
+              if (hasWhite) {
+                content = (
+                  <div className={`w-[80%] h-[80%] rounded-full bg-white shadow-[0_4px_6px_rgba(0,0,0,0.5),_inset_0_-4px_0_rgba(200,200,200,0.6)] border border-gray-300 flex items-center justify-center transition-transform duration-300 z-10 ${isDoubleCaptureAnim ? 'animate-bounce' : ''}`}>
+                    {isKing && <div className="w-1/2 h-1/2 rounded-full border-[5px] border-gray-300"></div>}
+                  </div>
+                );
+              } else if (hasBlack) {
+                content = (
+                  <div className={`w-[80%] h-[80%] rounded-full bg-gray-900 shadow-[0_4px_6px_rgba(0,0,0,0.7),_inset_0_-4px_0_rgba(60,60,60,0.8)] border border-black flex items-center justify-center transition-transform duration-300 z-10 ${isDoubleCaptureAnim ? 'animate-bounce' : ''}`}>
+                    {isKing && <div className="w-1/2 h-1/2 rounded-full border-[5px] border-gray-600"></div>}
+                  </div>
+                );
+              }
+            }
+
+            const isSelected = selectedSquare === squareIdx;
+            const hasDot = activeDots.has(squareIdx);
+
+            let dot = null;
+            if (hasDot) {
+              dot = <div className="absolute w-[30%] h-[30%] rounded-full bg-white/70 z-20 pointer-events-none"></div>;
+            }
+
+            return (
+              <div 
+                key={i} 
+                onClick={() => isDark && handleSquareClick(squareIdx)}
+                className={`w-full h-full flex items-center justify-center relative
+                  ${isDark ? 'bg-[#8B4513] cursor-pointer' : 'bg-[#DEB887]'}
+                  ${isForced && !isSelected ? 'ring-inset ring-4 ring-red-500 animate-pulse' : ''}
+                `}
+              >
+                {isSelected && isDark && <div className="absolute inset-0 bg-yellow-400/50 z-0 pointer-events-none"></div>}
+                {isDark && <span className="absolute z-0 text-white/30 font-bold text-xs pointer-events-none select-none">{squareIdx}</span>}
+                {content}
+                {dot}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* PANNELLO STATISTICHE E CRONOLOGIA */}
+        <div className="w-full lg:w-80 bg-white/80 backdrop-blur-md shadow-xl rounded-2xl p-5 border border-gray-200 flex flex-col h-[400px] lg:h-[600px] flex-shrink-0">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            Statistiche Partita
+          </h3>
+          
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {/* Giocatore */}
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 flex flex-col items-center">
+              <span className="text-sm font-semibold text-blue-800">Tu (Bianco)</span>
+              <div className="flex items-center mt-1 gap-1">
+                <div className="w-4 h-4 rounded-full bg-white border border-gray-400 shadow-sm"></div>
+                <span className="text-2xl font-black text-blue-600">{capturedByHuman}</span>
+              </div>
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Catture</span>
             </div>
-          );
-        })}
+            
+            {/* Bot */}
+            <div className="bg-red-50 rounded-xl p-3 border border-red-100 flex flex-col items-center">
+              <span className="text-sm font-semibold text-red-800">MCTS Bot</span>
+              <div className="flex items-center mt-1 gap-1">
+                <div className="w-4 h-4 rounded-full bg-gray-900 border border-black shadow-sm"></div>
+                <span className="text-2xl font-black text-red-600">{capturedByBot}</span>
+              </div>
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">Catture</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col flex-1 min-h-0">
+            <h4 className="text-sm font-bold text-gray-700 mb-2 uppercase tracking-wide">Cronologia Mosse</h4>
+            <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl border border-gray-200 p-2 flex flex-col gap-1 shadow-inner">
+              {moveHistory.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm mt-4 italic">Nessuna mossa ancora</div>
+              ) : (
+                moveHistory.map((m, idx) => (
+                  <div key={idx} className={`text-sm p-2 rounded-lg flex items-center justify-between border-l-4 ${m.player === 'Tu' ? 'bg-blue-50/50 border-blue-400' : 'bg-red-50/50 border-red-400'}`}>
+                    <span className="font-semibold text-gray-700">{m.player}</span>
+                    <span className="font-mono text-gray-600">
+                      {m.from} ➔ {m.to}
+                    </span>
+                    {m.caps > 0 ? (
+                      <span className="text-xs font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">+{m.caps}</span>
+                    ) : (
+                      <span className="w-6"></span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+
       </div>
       
     </div>
