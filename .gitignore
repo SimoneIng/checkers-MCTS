@@ -56,4 +56,7 @@ dkms.conf
 .DS_Store
 
 docs/study/
+docs/analysis/
 build/
+__pycache__/
+*.pyc

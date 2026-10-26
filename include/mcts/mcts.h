@@ -103,10 +103,11 @@ void mcts_expand(uint32_t node_idx, Bitboard* board, int current_player);
 
 /**
  * @brief Fase 3: SIMULATION (Rollout).
- * Esegue una partita randomica partendo dalla scacchiera corrente.
+ * Esegue una partita randomica partendo dalla scacchiera corrente con cut-off massimo.
+ * @param max_rollout_moves Numero massimo di semimosse prima del cut-off euristico (0 per illimitato/default 80).
  * @return Il reward dal punto di vista del BIANCO (1.0 = vittoria B, 0.0 = vittoria N, 0.5 = patta).
  */
-float mcts_simulate(Bitboard* board, int current_player);
+float mcts_simulate(Bitboard* board, int current_player, int max_rollout_moves);
 
 /**
  * @brief Fase 4: BACKPROPAGATION.

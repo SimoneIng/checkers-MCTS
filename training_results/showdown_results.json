@@ -1,0 +1,19 @@
+{
+  "ucb1_best": {
+    "id": "Arm_1",
+    "c": 0.8,
+    "cutoff": 30,
+    "label": "(\u03b1=0.8,  cutoff=30)"
+  },
+  "puct_best": {
+    "id": "Arm_1",
+    "c": 0.8,
+    "cutoff": 30,
+    "label": "(C=0.8,  cutoff=30)"
+  },
+  "games_played": 20,
+  "ucb1_wins": 4,
+  "puct_wins": 3,
+  "draws": 13,
+  "winner": "UCB1"
+}

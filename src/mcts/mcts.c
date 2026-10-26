@@ -157,12 +157,22 @@ void mcts_expand(uint32_t node_idx, Bitboard* board, int current_player) {
     node->is_fully_expanded = 1;
 }
 
-float mcts_simulate(Bitboard* board, int current_player) {
+float mcts_simulate(Bitboard* board, int current_player, int max_rollout_moves) {
     Bitboard sim_board = *board; // Lavoriamo su una copia per preservare lo stato dell'albero
     int player = current_player;
     int half_moves = 0;
+    int moves_count = 0;
     
     while (1) {
+        // Cut-off euristico se specificato
+        if (max_rollout_moves > 0 && moves_count >= max_rollout_moves) {
+            int w = __builtin_popcount(sim_board.white_pieces) + 2 * __builtin_popcount(sim_board.white_pieces & sim_board.kings);
+            int b = __builtin_popcount(sim_board.black_pieces) + 2 * __builtin_popcount(sim_board.black_pieces & sim_board.kings);
+            if (w > b) return 0.75f;
+            if (b > w) return 0.25f;
+            return 0.5f;
+        }
+
         GameStatus status = check_game_status(&sim_board, player, half_moves);
         if (status == WHITE_WINS) return 1.0f;
         if (status == BLACK_WINS) return 0.0f;
@@ -189,6 +199,7 @@ float mcts_simulate(Bitboard* board, int current_player) {
         
         make_move(&sim_board, move, player);
         player = !player;
+        moves_count++;
     }
 }
 

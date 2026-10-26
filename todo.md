@@ -3,7 +3,7 @@
 ## Fase 0: Setup e Rappresentazione (Completata)
 - [x] Analisi dei vincoli del progetto (C, MCTS, velocità, memoria).
 - [x] Scelta della rappresentazione: 3 Bitboard a 32-bit (`uint32_t`) per le 32 caselle giocabili.
-- [x] Stesura del documento sulle motivazioni architetturali (`docs/bitboard_representation.md`).
+- [x] Stesura del documento sulle motivazioni architetturali (`docs/analysis/bitboard_representation.md`).
 - [x] Implementazione base (`bitboard.h` e `bitboard.c`) e inizializzazione.
 - [x] Stampa della scacchiera a terminale.
 - [x] Organizzazione cartelle (`src/checkers/`, `include/checkers/`) e creazione del `Makefile` ricorsivo.
@@ -38,6 +38,11 @@
 - [x] Integrazione del ciclo di eventi UI con il motore logico dell'AP in background.
 
 ## Fase 6: Tuning degli Iperparametri e Analisi Sperimentale
-- [ ] Automazione dei match (Tornei Round-robin o Algoritmi Genetici) tra AP con valori di costanti di esplorazione differenti.
-- [ ] Estrazione dei dati di esecuzione (es. Win Rate per parametro, nodi/sec espansi).
-- [ ] Stesura del documento finale (Analisi Sperimentale delle configurazioni).
+- [x] Estensione del motore C con parametrizzazione del `rollout_cutoff` ed euristica di materiale.
+- [x] Creazione del runner nativo C ad alte prestazioni (`build/play_match`).
+- [x] Implementazione script Best Arm Identification con Successive Rejects per UCB1 (`training/tune_ucb1.py`).
+- [x] Implementazione script Best Arm Identification con Successive Rejects per PUCT (`training/tune_puct.py`).
+- [x] Implementazione scontro diretto tra campioni UCB1 vs PUCT (`training/showdown.py`).
+- [x] Stesura documentazione teorica e metodologica (`docs/analysis/metodologia_tuning_bai.md`).
+- [x] Esecuzione dei test di tuning ed estrazione dei risultati JSON.
+- [x] Aggiornamento slide finale e report con i risultati sperimentali reali.

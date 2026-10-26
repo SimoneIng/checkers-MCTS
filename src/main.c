@@ -58,7 +58,7 @@ int main() {
         fflush(stdout); // Forza la stampa a video per evitare buffering
         
         Move best_move;
-        uint32_t iterations = mcts_get_best_move_anytime(&board, current_player, time_limit, policy, exploration_c, &best_move);
+        uint32_t iterations = mcts_get_best_move_anytime(&board, current_player, time_limit, policy, exploration_c, 80, &best_move);
         
         printf("MCTS ha eseguito %u rollout in %.1f sec.\n", iterations, time_limit);
         printf("Mossa scelta: da %d a %d (promozione: %d, catturate: %u)\n", 

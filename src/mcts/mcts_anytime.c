@@ -15,6 +15,7 @@ uint32_t mcts_get_best_move_anytime(
     double time_limit_sec, 
     SelectionPolicy policy, 
     float exploration_constant,
+    int rollout_cutoff,
     Move* out_best_move
 ) {
     // 1. O(1) Reset del pool per pulire l'albero precedente senza invocare la memoria di sistema
@@ -64,7 +65,7 @@ uint32_t mcts_get_best_move_anytime(
         }
         
         // === FASE 3: Simulation (Rollout) ===
-        float reward = mcts_simulate(&current_board, player);
+        float reward = mcts_simulate(&current_board, player, rollout_cutoff);
         
         // === FASE 4: Backpropagation ===
         mcts_backpropagate(selected_node_idx, reward);
