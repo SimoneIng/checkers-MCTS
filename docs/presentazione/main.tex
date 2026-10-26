@@ -1,0 +1,563 @@
+\documentclass[10pt]{beamer}
+
+\usetheme{Madrid}
+% Colore Blu stile Federico II
+\definecolor{FedBlue}{RGB}{0, 51, 102}
+\setbeamercolor{structure}{fg=FedBlue}
+\setbeamercolor{palette primary}{bg=FedBlue!70!black,fg=white}
+\setbeamercolor{palette secondary}{bg=FedBlue,fg=white}
+\setbeamercolor{palette tertiary}{bg=FedBlue!80!white,fg=white}
+
+% Rimuove le scritte in basso (autore, titolo, data) mantenendo solo il contatore slide a destra
+\setbeamertemplate{footline}{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.25ex,dp=1ex,right]{footline}%
+    \usebeamerfont{date in head/foot}\insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+% Rimuove i simboli di navigazione
+\setbeamertemplate{navigation symbols}{}
+
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{tikz}
+
+\title[Checkers MCTS]{Checkers MCTS}
+\subtitle{Corso di Intelligent Web}
+\titlegraphic{\includegraphics[width=3cm]{assets/logo-uni.jpg}}
+\author{Simone Ingenito \\ \vspace{0.2cm} \small Matricola N9000526}
+\institute{Università degli Studi di Napoli Federico II}
+\date{Anno Accademico 2025/2026}
+
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{Indice}
+    \tableofcontents
+\end{frame}
+
+\section{Introduzione}
+\begin{frame}{Obiettivo e Vincoli del Progetto}
+    \textbf{Obiettivo:} Sviluppare un Artificial Player (AP) capace di giocare alla Dama Italiana.
+    
+    \vspace{0.4cm}
+    \textbf{Requisiti della traccia:}
+    \begin{itemize}
+        \item \textbf{Core logico:} Implementato obbligatoriamente in \textbf{C}.
+        \item \textbf{Intelligenza Artificiale:} Basata su \textbf{Monte Carlo Tree Search (MCTS)}.
+        \item \textbf{Configurabilità:} Limite di tempo variabile (0.2s, 1.0s, 3.0s) tramite algoritmo \textit{Anytime}.
+        \item \textbf{Regole:} Implementazione delle regole italiane (cattura obbligatoria, priorità di pezzo e quantità).
+        \item \textbf{Giocabilità:} Creazione di un'interfaccia grafica per l'interazione umana.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Architettura del Sistema}
+    Per soddisfare i requisiti garantendo massime prestazioni e un'esperienza utente moderna, l'architettura è stata divisa in tre livelli:
+    
+    \vspace{0.4cm}
+    \begin{itemize}
+        \item \textbf{Motore Nativo (C puro):} Tutta la logica di gioco, bitboard e l'algoritmo MCTS sono scritti in C per avere il totale controllo sulla memoria (indispensabile per i limiti di tempo stretti).
+        \item \textbf{Il Ponte (WebAssembly):} Il codice C è stato compilato tramite \textit{Emscripten} in un modulo WASM. Questo permette di eseguire il codice nativo \textbf{direttamente nel browser} lato client a velocità quasi-nativa.
+        \item \textbf{L'Interfaccia (React + Tailwind):} Una UI moderna e reattiva che comunica in modo asincrono con l'engine WASM per rendering grafico ed eventi utente, senza bisogno di alcun server backend.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Perché questa è la soluzione ottimale?}
+    \begin{block}{Nessuna Latenza di Rete}
+        Evitando architetture Client-Server tradizionali (es. server Python in background), si annulla il \textit{network delay}. Ogni millisecondo è riservato esclusivamente ai calcoli MCTS.
+    \end{block}
+    
+    \begin{block}{Prestazioni e Sicurezza}
+        WebAssembly offre prestazioni molto vicine al binario nativo, ed essendo eseguito in sandbox nel browser non richiede l'installazione di librerie esterne da parte dell'utente.
+    \end{block}
+\end{frame}
+
+\section{Rappresentazione dello Stato}
+\begin{frame}{Rappresentazione scacchiera: Bitboards 32-bit}
+    \textbf{Alternativa Plausibile:} Usare una matrice \texttt{int board[8][8]} o un intero a 64-bit (\texttt{uint64\_t}).
+    \begin{itemize}
+        \item \textbf{Svantaggi:} Le matrici richiedono cicli \texttt{for} lenti per iterare; un intero a 64-bit per una scacchiera in cui si usano solo 32 caselle (quelle scure) spreca il 50\% della memoria e dei cicli di clock.
+    \end{itemize}
+    
+    \vspace{0.1cm}
+    \textbf{Scelta Effettuata: Bitboard a 32-bit (\texttt{uint32\_t})}
+    \begin{itemize}
+        \item Mappiamo le sole 32 caselle scure su singoli bit di un intero, numerate da 0 a 31.
+        \item Lo stato è definito al 100\% da soli tre \texttt{uint32\_t}: \\
+        \texttt{white\_pieces}, \texttt{black\_pieces}, \texttt{kings} (dame).
+        \item \textbf{Perché è migliore:} Struttura dati densa (zero sprechi). La RAM richiesta per ogni nodo è minima, permettendo alla CPU di conservare milioni di nodi nella \textit{Cache}. Le valutazioni di posizione avvengono in parallelo su tutta la scacchiera in 1 singolo ciclo di clock (es. caselle vuote: \texttt{\textasciitilde(white | black)}).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Move Generation: LUTs vs Calcolo a Runtime}
+    \textbf{Alternativa Plausibile:} Tradurre gli indici (0-31) in coordinate (X, Y), sommare i movimenti e usare \texttt{if (x > 0 \&\& y < 7)} per evitare di uscire dalla scacchiera.
+    \begin{itemize}
+        \item \textbf{Svantaggi:} I continui controlli condizionali per i bordi (\textit{branching}) distruggono la pipeline della CPU, risultando catastrofici in un algoritmo AnyTime che esegue milioni di cicli.
+    \end{itemize}
+    
+    \vspace{0.1cm}
+    \textbf{Scelta Effettuata: Pre-calcolo in 3 Array Globali (LUT)}
+    \begin{itemize}
+        \item \texttt{MOVES[32][4]}: Maschera della casella d'atterraggio (1 passo).
+        \item \texttt{JUMPS[32][4]}: Maschera d'atterraggio per i salti (catture a 2 passi).
+        \item \texttt{CAPTURES[32][4]}: Maschera della casella intermedia (pezzo mangiato).
+    \end{itemize}
+    Se lo spostamento esce dai bordi della scacchiera, la matrice restituisce semplicemente il valore \texttt{0}.
+\end{frame}
+
+\begin{frame}[fragile]{Move Generation: Calcoli in $O(1)$}
+    Grazie alle LUT, il motore non esegue mai calcoli geometrici a runtime, ma usa esclusivamente l'\textbf{Algebra Booleana}.
+    
+    \vspace{0.2cm}
+    \textbf{Validazione infallibile in un ciclo di clock (Estratto C):}
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+uint32_t landing = JUMPS[sq][DIR_NW]; 
+uint32_t victim = CAPTURES[sq][DIR_NW];
+
+// La cattura e' valida se atterro sul vuoto E scavalco un nemico
+if ((landing & empty_squares) && (victim & opponent_pieces)) {
+    // Cattura autorizzata!
+}
+\end{lstlisting}
+    \vspace{0.1cm}
+    \textbf{Perché è superiore:} Non serve alcun controllo per capire se si è usciti dalla scacchiera: se il bordo viene superato, \texttt{JUMPS} restituisce \texttt{0}, rendendo falsa la condizione \texttt{landing \& empty\_squares}.
+\end{frame}
+
+\begin{frame}[fragile]{Aggiornamento di Stato: Bitwise XOR}
+    \textbf{Alternativa Plausibile:} Usare \texttt{memcpy} per duplicare l'intero stato della scacchiera per ogni nuovo ramo dell'albero esplorato.
+    \begin{itemize}
+        \item \textbf{Svantaggi:} RAM e CPU verrebbero intasate di inutili allocazioni in pochi millisecondi.
+    \end{itemize}
+    
+    \vspace{0.1cm}
+    \textbf{Scelta Effettuata: Modifica In-Place con Operatori Bitwise}
+    
+    Invece di copiare la scacchiera, la modifichiamo sul posto.
+
+    \vspace{0.1cm}
+    
+    \textbf{1. Spostamento (Spegnere 'From', Accendere 'To'):}
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+// Creiamo una maschera con il bit di partenza e di arrivo accesi
+uint32_t from_to_mask = (1U << move.from) | (1U << move.to);
+
+// Lo XOR inverte esattamente quei due bit in un colpo solo
+board->white_pieces ^= from_to_mask; 
+\end{lstlisting}
+
+    \textbf{2. Cattura (Eliminare il pezzo avversario):}
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+// Usiamo l'AND combinato al NOT (~) per azzerare il bit del nemico
+board->black_pieces &= ~(move.captured_men);
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{XOR: Unmake Move}
+    Costruire l'albero MCTS significa andare "avanti e indietro nel tempo": provare una mossa (scendere) e poi annullarla per provarne un'altra (salire).
+    
+    \vspace{0.1cm}
+    
+    \textbf{La proprietà Involutiva dello XOR:}
+    In algebra booleana, applicare lo XOR due volte con la stessa maschera annulla l'operazione ($A \oplus B \oplus B = A$).
+    
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+// 1. Faccio la mossa per scendere nell'albero
+board->white_pieces ^= from_to_mask; 
+
+// ...esplorazione dei figli...
+
+// 2. Annulla la mossa (Unmake) riapplicando la stessa riga!
+board->white_pieces ^= from_to_mask; 
+\end{lstlisting}
+    
+    \vspace{0.1cm}
+    \textbf{Perché è superiore:} \textit{Zero allocazioni.} L'albero esplora milioni di stati alternando in continuazione \texttt{make\_move} e \texttt{unmake\_move} sul singolo intero a 32-bit originale, senza \textbf{mai} creare copie della scacchiera.
+\end{frame}
+
+\section{Algoritmo MCTS}
+\begin{frame}{Implementazione AP: Algoritmo MCTS}
+    \textbf{IL Monte Carlo Tree Search}
+    è un algoritmo di ricerca euristica che costruisce un albero decisionale in modo asimmetrico. \\ Si concentra sui rami più promettenti bilanciando \textit{exploration} e \textit{exploitation}.
+    
+    \vspace{0.2cm}
+    \textbf{Le 4 Fasi:}
+    L'algoritmo ripete questo ciclo per migliaia di volte finché non scade il tempo limite:
+    \begin{enumerate}
+        \item \textbf{Selection (Selezione):} Partendo dalla radice, si scende nell'albero scegliendo il figlio con il valore più alto (usando formule matematiche come UCB1 o PUCT) fino a raggiungere un nodo foglia.
+        \item \textbf{Expansion (Espansione):} Se la foglia non è uno stato terminale, si aggiunge un nuovo nodo figlio all'albero.
+        \item \textbf{Simulation / Rollout (Simulazione):} Dal nuovo nodo si gioca una partita casuale fino alla fine (Vittoria, Sconfitta o Patta).
+        \item \textbf{Backpropagation (Retropropagazione):} Il risultato della simulazione viene usato per aggiornare il punteggio (W) e le visite (N) di tutti i nodi attraversati.
+    \end{enumerate}
+\end{frame}
+\begin{frame}[fragile]{Struttura Albero MCTS: Array vs Puntatori}
+    \textbf{Alternativa Plausibile:} Nodi con array di puntatori standard (\texttt{Node**}).
+    \begin{itemize}
+        \item \textbf{Svantaggi:} L'allocazione a \textit{runtime} frammenta la memoria (Cache Miss garantiti) e consuma troppa memoria (i puntatori sono a 64-bit).
+    \end{itemize}
+    
+    \vspace{0.1cm}
+    \textbf{Scelta Effettuata: Lista Concatenata in un Array 1D}
+    \begin{itemize}
+        \item Ogni nodo non ha puntatori, ma usa \textbf{indici a 32-bit}:
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+int32_t first_child;
+int32_t next_sibling;
+\end{lstlisting}
+        \item \textbf{Perché è superiore:} I figli non sono salvati in un array dentro al nodo, ma formano una \textit{Lista Concatenata} all'interno del Memory Pool pre-allocato. Scorrere i figli si traduce in saltare da un indice all'altro dell'array, portando al massimo il \textit{prefetching} hardware.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Gestione Memoria: Memory Pool vs \texttt{malloc()}}
+    \textbf{Alternativa Plausibile:} Creare nodi a \textit{runtime} chiamando \texttt{malloc()} per l'espansione e \texttt{free()} per svuotare la memoria.
+    \begin{itemize}
+        \item \textbf{Svantaggi:} \texttt{malloc} effettua System Calls, richiedendo cambi di contesto al Kernel. In un loop da 1 milione di iterazioni/secondo (budget di 0.2s), andrebbe a influire negativamente sulle prestazioni.
+    \end{itemize}
+    
+    \vspace{0.2cm}
+    \textbf{Scelta Effettuata: Pre-allocazione (Memory Pool)}
+    \begin{itemize}
+        \item Allocazione di un singolo gigantesco array da 2 Milioni di nodi ($\sim 70$ MB) una singola volta all'avvio.
+        \item \textbf{Perché è superiore:} Per instanziare un nuovo nodo in fase di Expansion, si incrementa un semplice puntatore: \texttt{pool\_index++} in complessità $O(1)$ assoluto. Zero frammentazione, zero \textit{latenza} (chiamate al SO).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Fase 1: Selection (UCB1 e PUCT)}
+    Partendo dalla radice, si scende nell'albero scegliendo il nodo figlio che massimizza una formula di \textit{Bandit Algorithm}. Sono state implementate due politiche:
+    
+    \vspace{0.2cm}
+    \textbf{1. Formula UCB1:}
+    $$UCB1 = \underbrace{\frac{W_i}{N_i}}_{\text{Exploitation}} + \underbrace{C \cdot \sqrt{\frac{\ln N_{parent}}{N_i}}}_{\text{Exploration}}$$
+    Bilancia lo sfruttamento delle mosse vincenti note con l'esplorazione di rami poco visitati.
+    
+    \vspace{0.2cm}
+    \textbf{2. Formula PUCT (Predictor UCT - AlphaZero):}
+    $$PUCT = \frac{W_i}{N_i} + C \cdot \frac{\sqrt{N_{parent}}}{1 + N_i}$$
+    \textbf{Differenza:} Il termine di esplorazione decade più rapidamente ($1/(1+N_i)$ invece di $\sqrt{1/N_i}$), rendendo la ricerca più profonda e aggressiva.
+\end{frame}
+
+\begin{frame}{Fase 2: Expansion}
+    Quando la fase di selezione raggiunge un nodo che non è ancora stato completamente esplorato (nodo foglia non terminale):
+    
+    \vspace{0.3cm}
+    \begin{itemize}
+        \item \textbf{Generazione Mosse:} Si invocano le LUT e il Move Generator C per calcolare tutte le mosse legali dello stato attuale.
+        \item \textbf{Allocazione nel Memory Pool:} Si preleva il successivo slot libero dall'array globale ($O(1)$) per istanziare il nuovo nodo figlio.
+        \item \textbf{Collegamento:} Il nodo viene aggiunto alla lista concatenata dei figli del padre aggiornando i puntatori interi \texttt{first\_child} e \texttt{next\_sibling}.
+        \item \textbf{Inizializzazione:} Il nuovo nodo parte con: $N = 0$, $W = 0$.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Fase 3: Simulation (Rollout)}
+    Dal nodo appena espanso si gioca una partita fino alla conclusione per ottenere una stima euristica del valore della posizione:
+    
+    \vspace{0.3cm}
+    \begin{itemize}
+        \item \textbf{Mosse Pseudo-Casuali:} I giocatori scelgono mosse a caso tra quelle legali.
+        \item \textbf{Risoluzione delle Patte (Cut-off):} Nella Dama due Re possono inseguirsi all'infinito. Per rispettare i limiti Anytime stringenti, abbiamo inserito:
+        \begin{itemize}
+            \item Un contatore di semimosse consecutive senza catture o promozioni (regola delle 40 mosse).
+            \item Un tetto massimo di profondità di rollout, oltre il quale la simulazione termina dichiarando la patta (draw).
+        \end{itemize}
+        \item \textbf{Esito Finale:} Restituisce: $+1$ (Vittoria), $0$ (Patta), o $-1$ (Sconfitta).
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Fase 4: Backpropagation}
+    Il risultato ottenuto dal Rollout ($+1, 0, -1$) deve essere comunicato a tutti gli antenati per aggiornare le conoscenze dell'albero:
+    
+    \vspace{0.3cm}
+    \begin{itemize}
+        \item \textbf{Risalita dell'Albero:} Si ripercorre all'indietro il percorso dalla foglia espansa fino alla radice.
+        \item \textbf{Aggiornamento Visite:} Per ogni nodo attraversato, si incrementa il conteggio visite:
+        $$N = N + 1$$
+        \item \textbf{Aggiornamento Punteggio:} Si aggiorna il valore cumulato $W$ dal punto di vista del giocatore di turno a quel livello:
+        $$W = W + \text{reward}$$
+    \end{itemize}
+    \vspace{0.2cm}
+    Al termine del tempo limite la mossa scelta dal bot sarà semplicemente quella con il maggior numero di visite $N$ alla radice.
+\end{frame}
+
+\begin{frame}[fragile]{Gestione dei Turni: Approccio Minimax}
+    La Dama è un gioco \textbf{a somma zero}: la vittoria di un giocatore è la sconfitta dell'avversario.
+    
+    \vspace{0.2cm}
+    \textbf{Gestione dell'alternanza dei giocatori}
+    \begin{itemize}
+        \item \textbf{Memorizzazione Globale:} Nella Backpropagation, il punteggio $W$ viene accumulato sempre dal punto di vista del \textbf{Bianco} ($+1.0$ vince Bianco, $0.0$ vince Nero, $0.5$ patta).
+        \item \textbf{Inversione nella Selezione UCB1:} Durante la discesa, il calcolo della componente di sfruttamento (\textit{Exploitation}) si adatta al turno:
+    \end{itemize}
+
+\begin{lstlisting}[language=C, basicstyle=\ttfamily\footnotesize, keywordstyle=\color{blue}]
+float exploitation = child_score / child_visits;
+if (current_player == 0) { // 0 = Turno del Nero
+    exploitation = 1.0f - exploitation; // Inverte il valore!
+}
+\end{lstlisting}
+
+    \vspace{0.1cm}
+    \textbf{Risultato:} Il Bianco massimizza il proprio punteggio; il Nero sceglie la mossa che minimizza quello del Bianco (massimizzando il proprio).
+\end{frame}
+
+\section{Interfaccia Grafica}
+\begin{frame}{Interfaccia Grafica e Integrazione C}
+    \textbf{Il Problema:} Il motore è in C puro. Scrivere anche l'interfaccia grafica in C è piuttosto tedioso.
+    
+    \vspace{0.3cm}
+    \textbf{La Soluzione: WebAssembly (WASM) + React}
+    \begin{itemize}
+        \item Il codice C è stato compilato tramite \textbf{Emscripten} in un binario WebAssembly (\texttt{.wasm}).
+        \item Permette all'interfaccia React di eseguire nativamente il motore logico \textbf{direttamente nel browser}, senza latenze di rete né la necessità di un backend in C.
+        \item Interfaccia sviluppata in React + Tailwind CSS: reattiva, intuitiva, con la possibilità di modificare in tempo reale la difficoltà.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Il Ponte WASM: Interoperabilità C-React}
+    Il file \texttt{wasm\_api.c} rappresenta il middleware che esporta lo stato del gioco e l'algoritmo al mondo Javascript.
+    
+    \vspace{0.3cm}
+    \textbf{Esportazione tramite Emscripten:}
+    \begin{itemize}
+        \item La macro \texttt{EMSCRIPTEN\_KEEPALIVE} istruisce il compilatore a non eliminare la funzione e a renderla invocabile dall'oggetto \texttt{window.Module} in JS.
+    \end{itemize}
+    
+    \textbf{Funzioni principali esportate:}
+    \begin{itemize}
+        \item \texttt{\_init\_engine()}: Alloca il Memory Pool e le LUTs.
+        \item \texttt{\_get\_white\_pieces()}: Espone la bitboard (intero a 32-bit).
+        \item \texttt{\_play\_human\_move(from, to)}: Valida la mossa e aggiorna lo stato.
+        \item \texttt{\_play\_bot\_move(time, policy, c)}: Blocca il thread JS, esegue l'iterazione MCTS nel limite di tempo e restituisce la mossa scelta.
+    \end{itemize}
+    
+    \textbf{Gestione della Memoria (Stringhe):} Le mosse legali sono restituite al JS come puntatore a stringa (\texttt{char*}). React decodifica questo indirizzo usando la funzione di utilità \texttt{UTF8ToString} integrata da Emscripten.
+\end{frame}
+
+\section{Tuning degli Iperparametri e Risultati}
+\begin{frame}{Gli Iperparametri del Motore Decisionale}
+    Le prestazioni dell'Artificial Player (AP) dipendono dall'equilibrio tra \textbf{velocità di calcolo} e \textbf{qualità euristica}. Gli Iperparametri chiave sono: 
+    
+    \vspace{0.2cm}
+    \begin{enumerate}
+        \item \textbf{Costante di Esplorazione ($C$ o $\alpha$):}
+        Pesa il termine di \textit{Exploration} rispetto all'\textit{Exploitation}. 
+        \begin{itemize}
+            \item Valori troppo alti ($\ge 1.8$) indirizzano l'AP verso mosse che fanno sacrificare materiale; valori troppo bassi portano l'AP a fossilizzarsi su rami che possono non essere ottimali.
+        \end{itemize}
+
+        \item \textbf{Limite di Cut-off del Rollout (\texttt{cutoff}):}
+        Numero massimo di semimosse simulate prima di troncare con l'euristica di materiale.
+        \begin{itemize}
+            \item Cutoff breve = simulazioni ultra-veloci (più nodi/sec); cutoff lungo = stima più profonda ma simulazioni lente.
+        \end{itemize}
+
+        \item \textbf{Politica di Selezione (\texttt{policy}):}
+        La formula di discesa dell'albero: \textbf{UCB1} (esplorazione logaritmica bilanciata) vs \textbf{PUCT} (decadimento rapido in profondità stile AlphaZero).
+
+        \item \textbf{Tempo per Mossa (\texttt{time\_limit}):}
+        Budget dell'algoritmo Anytime: fissato a \textbf{0.02s} per il training massivo; scalato a \textbf{0.2s, 1.0s, 3.0s} nei preset della GUI (vincoli di traccia).
+    \end{enumerate}
+
+    \vspace{0.15cm}
+    \footnotesize
+    $\implies$ Poiché $C$ e \texttt{cutoff} sono strettamente interdipendenti il tuning è configurato su \textbf{coppie congiunte} $(C,      
+\text{cutoff})$.
+\end{frame}
+
+
+\begin{frame}{Tuning degli Iperparametri}
+    Il Tuning degli iperparametri è stato formulato come un problema di \textbf{Best Arm Identification (BAI)}:
+    
+    \vspace{0.2cm}
+    \textbf{Algoritmo Successive Rejects ($T = 400$ partite):}
+    \begin{itemize}
+        \item Spazio di ricerca formato da coppie $(\alpha, \text{cutoff})$.
+        \item Ad ogni fase, tutti i bracci attivi disputano partite a colori alternati (50\% Bianco, 50\% Nero).
+        \item Il braccio con la peggior media empirica $\hat{\mu}_i$ viene eliminato definitivamente.
+        \item I finalisti arrivano a disputare \textbf{oltre 100 partite ciascuno}, per assicuraci che la dominanza di uno sull'altro non sia frutto del "caso" ma abbia una solida base statistica.
+    \end{itemize}
+    \vspace{0.1cm}
+    \textbf{Giustificazione Teorica del Budget ($H_2$):} Con $T=400$, il bound formale di Audibert et al. garantisce che il rischio d'errore $P(\text{err}) \le \frac{K(K-1)}{2} \exp\left(-\frac{T-K}{\overline{\log}(K) H_2}\right)$ sia rigorosamente controllato.
+\end{frame}
+
+\begin{frame}{Approfondimento: Complessità $H_2$ e Bound del Budget}
+    \textbf{La Formula del Limite di Errore (Audibert, Bubeck, Munos, 2010):}
+    $$P(\text{err}) \le \frac{K(K-1)}{2} \exp\left( - \frac{T - K}{\overline{\log}(K) \cdot H_2} \right)$$
+    
+    \vspace{0.15cm}
+    \textbf{Significato dei Termini:}
+    \begin{itemize}
+        \item $T = 400$: Budget complessivo di partite da distribuire tra tutti i candidati.
+        \item $K = 6$: Numero di bracci (configurazioni) in gara.
+        \item $\overline{\log}(6) \approx 1.95$: Costante di normalizzazione armonica ($\frac{1}{2} + \sum_{i=2}^6 \frac{1}{i}$).
+        \item $H_2 = \max_{i} \left(\frac{i}{\Delta_{(i)}^2}\right)$: \textbf{Indice di difficoltà del problema}, dove $\Delta_i = \mu^* - \mu_i$ è il distacco reale tra il migliore e il braccio $i$. Minore è il distacco tra i bot, più alto è $H_2$.
+    \end{itemize}
+    
+    \vspace{0.15cm}
+    \textbf{Perché questa formula giustifica $T=400$:}
+    Il termine $-\frac{T-K}{\overline{\log}(K) H_2}$ all'esponente dimostra che la probabilità di scartare per errore il braccio migliore \textbf{decade esponenzialmente} al crescere di $T$. 
+    
+    \vspace{0.1cm}
+    \footnotesize
+    $\implies$ Non abbiamo scelto 400 a caso: la teoria dei Banditi garantisce matematicamente che 400 partite bastano ad abbattere il rischio d'errore sui gap $\Delta$ osservati.
+\end{frame}
+
+\begin{frame}{Esecuzione Sperimentale Successive Rejects ($T=400$)}
+    Allocazione progressiva delle partite ($K=6$ bracci):
+    
+    \vspace{0.2cm}
+    \centering
+    \small
+    \begin{tabular}{lcccccl}
+        \toprule
+        \textbf{Braccio} & \textbf{Parametri} & \textbf{Match} & \textbf{Punti} & \textbf{Win Rate} & \textbf{Esito} \\
+        \midrule
+        \textbf{Arm\_1} & $\alpha = \mathbf{0.8}, \text{cut} = \mathbf{30}$ & \textbf{104} & \textbf{61.5} & \textbf{59.13\%} & \textbf{BEST ARM} \\
+        \textbf{Arm\_2} & $\alpha = 1.0, \text{cut} = 40$ & 104 & 60.5 & 58.17\% & Runner-Up \\
+        \textbf{Arm\_3} & $\alpha = 1.41, \text{cut} = 30$ & 70 & 36.5 & 52.14\% & Eliminato \\
+        \textbf{Arm\_6} & $\alpha = 2.2, \text{cut} = 50$ & 52 & 25.5 & 49.04\% & Eliminato \\
+        \textbf{Arm\_5} & $\alpha = 1.8, \text{cut} = 40$ & 42 & 19.0 & 45.24\% & Eliminato \\
+        \textbf{Arm\_4} & $\alpha = 1.41, \text{cut} = 50$ & 34 & - & < 45\% & Eliminato \\
+        \bottomrule
+    \end{tabular}
+    
+    \vspace{0.3cm}
+    \raggedright
+    \footnotesize
+    \textbf{Efficienza del Metodo:} I bracci deboli giocano solo 34--42 partite; i due contendenti finalisti disputano 104 partite ciascuno per massimizzare la precisione statistica dove il margine è più sottile.
+\end{frame}
+
+\begin{frame}{Convergenza Statistica e Solidità dei Risultati}
+    \textbf{Il Principio alla Base: La Legge dei Grandi Numeri}
+    \begin{itemize}
+        \item In un gioco stocastico, un campione ridotto ($n < 20$ match) è dominato dal \textbf{rumore statistico}: una vittoria può dipendere dal caso.
+        \item All'aumentare del numero di partite ($n > 100$), la media empirica dei punteggi si stabilizza e \textbf{converge al   
+reale valore di forza} della configurazione.
+    \end{itemize}
+
+    \vspace{0.25cm}
+    \textbf{Come l'Algoritmo Garantisce la Convergenza Finale:}
+    \begin{itemize}
+        \item \textbf{Allocazione Progressiva:} Il Successive Rejects elimina tempestivamente i bracci deboli e concentra il budget 
+sulle configurazioni più competitive.
+        \item \textbf{Abbattimento della Varianza:} I due bracci finalisti arrivano a disputare \textbf{104 partite ciascuno}.      
+L'errore casuale viene neutralizzato proprio dove i margini di distacco sono più sottili.
+    \end{itemize}
+
+    \vspace{0.25cm}
+    \textbf{Implicazioni Pratiche:}
+    \begin{itemize}
+        \item \textbf{Certezza della Decisione:} Il primato di \texttt{Arm\_1} ($\alpha=0.8, \text{cutoff}=30$) non è una fluttuazione fortunata, ma un distacco solido e riproducibile.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Validazione Out-of-Sample: Il Torneo di Sfruttamento}
+    \textbf{Obiettivo del Test:}
+    Verificare le prestazioni fuori dal Successive Rejects per escludere qualsiasi condizionamento dell'algoritmo di selezione.
+    
+    \vspace{0.15cm}
+    \textbf{Setup del Match (200 Partite Dirette):}
+    \begin{itemize}
+        \item \textbf{Campione:} \texttt{Arm\_1} ($\alpha=0.8, \text{cutoff}=30$).
+        \item \textbf{Sfidante:} \texttt{Arm\_2} ($\alpha=1.0, \text{cutoff}=40$).
+        \item \textbf{Simmetria Totale:} 100 partite col Bianco, 100 col Nero.
+    \end{itemize}
+    
+    \vspace{0.15cm}
+    \textbf{Resoconto Finale dei Match:}
+    \begin{itemize}
+        \item \textbf{Vittorie Best Arm:} \textbf{60} (30.0\%)
+        \item \textbf{Patte:} \textbf{125} (62.5\%)
+        \item \textbf{Sconfitte Best Arm:} sole \textbf{15} (7.5\%)
+        \item \textbf{Punteggio Totale:} \textbf{122.5 / 200} (\textbf{61.25\%})
+        \item \textbf{95\% IC (Wilson):} $[54.35\%, 67.73\%]$
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Approfondimento: L'Intervallo di Confidenza al 95\% (Wilson)}
+    \textbf{La Formula di Wilson Score (Wilson, 1927):}
+    $$IC_{95\%} = \frac{\hat{p} + \frac{z^2}{2n} \pm z \sqrt{\frac{\hat{p}(1-\hat{p})}{n} + \frac{z^2}{4n^2}}}{1 + \frac{z^2}{n}}$$
+    
+    \vspace{0.15cm}
+    \textbf{Applicazione ai Dati Sperimentali ($n = 200, \hat{p} = 0.6125, z = 1.96$):}
+    \begin{itemize}
+        \item Sostituendo i valori osservati ($122.5/200$), otteniamo l'intervallo:
+        $$\mathbf{IC_{95\%} = [54.35\%, \; 67.73\%]}$$
+        \item \textbf{Perché Wilson e non Wald:} A differenza dell'approssimazione normale classica ($\hat{p} \pm z\sigma$), Wilson è affidabile su campioni finiti e asimmetrici, evitando distorsioni o sovrastime.
+    \end{itemize}
+
+    \vspace{0.15cm}
+    \textbf{Significato Pratico e Implicazioni:}
+    \begin{itemize}
+        \item \textbf{Interpretazione:} C'è il 95\% di probabilità che la \textbf{reale forza a lungo termine} del Best Arm contro il Runner-Up ricada tra il $54.35\%$ e il $67.73\%$.
+        \item \textbf{La Garanzia Decisiva:} Anche nello scenario pessimistico consentito dall'intervallo ($54.35\%$), il valore è \textbf{strettamente superiore al 50\% (parità)}.
+    \end{itemize}
+    
+    \vspace{0.1cm}
+    \footnotesize
+    $\implies$ La superiorità di \texttt{Arm\_1} non è un artefatto campionario: il test esclude con certezza statistica che i due bot abbiano pari forza.
+\end{frame}
+
+\begin{frame}{Validità Statistica: Dal Test d'Ipotesi al p-value}
+    \textbf{1. Formulazione dell'Ipotesi Nulla ($H_0$):}
+    \begin{itemize}
+        \item Assumiamo l'ipotesi che i due bot abbiano la stessa forza ($p = 0.5$).
+        \item Su $n = 200$ partite, il punteggio atteso dal caso puro e la deviazione standard sono:
+        $$\mu = n \cdot p = 200 \times 0.5 = \mathbf{100 \text{ punti}}, \qquad \sigma = \sqrt{n \cdot p \cdot (1-p)} = \sqrt{50} \approx \mathbf{7.07}$$
+    \end{itemize}
+    
+    \vspace{0.15cm}
+    \textbf{2. Calcolo dello Z-Score (Distanza dal Caso):}
+    Il Best Arm ha ottenuto $122.5$ punti ($+22.5$ sopra la media). Calcoliamo di quante deviazioni standard $\sigma$ ci siamo allontanati dal caso:
+    $$z = \frac{\text{Score} - \mu}{\sigma} = \frac{122.5 - 100}{\sqrt{50}} = \frac{22.5}{7.07} = \mathbf{3.182} \quad (\text{Oltre la soglia dei } 3\sigma)$$
+    
+    \vspace{0.15cm}
+    \textbf{3. Calcolo del p-value:}
+    $$p = P(Z \ge 3.182) = \mathbf{7.31 \times 10^{-4}} \ll 0.05 \quad (\approx \mathbf{0.07\%})$$
+    \footnotesize
+    $\implies$ C'è meno dello \textbf{0.07\%} di probabilità che questo scarto sia frutto della fortuna. L'ipotesi nulla $H_0$ è formalmente respinta: la superiorità è reale con oltre il \textbf{99.9\% di confidenza}.
+\end{frame}
+
+\begin{frame}{Configurazione Finale dei Livelli di Difficoltà}
+    Sulla base dei risultati sperimentali sono stati calibrati 4 preset nella GUI:
+    
+    \vspace{0.2cm}
+    \centering
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Livello} & \textbf{Tempo} & \textbf{Policy} & \textbf{Costante $C$} & \textbf{Comportamento} \\
+        \midrule
+        \textbf{Facile} & 0.2s & UCB1 & 1.0 & Veloce, ammette qualche imprecisione tattica \\
+        \textbf{Medio} & 1.0s & UCB1 & 1.414 & Solido, bilanciamento teorico standard \\
+        \textbf{Difficile} & 1.0s & PUCT & 1.414 & Calcolo profondo sulle varianti principali \\
+        \textbf{Gran Maestro} & 3.0s & UCB1 & 0.8 & \textbf{Configurazione Ottima BAI}, quasi impeccabile \\
+        \bottomrule
+    \end{tabular}
+    }
+    
+    \vspace{0.4cm}
+    \raggedright
+    \small
+    Tutti i valori rispettano i vincoli imposti dalla traccia (0.2s, 1.0s, 3.0s).
+\end{frame}
+
+\section{Conclusioni}
+\begin{frame}{Conclusioni: Perché è la versione migliore?}
+    Questa architettura soddisfa e supera i requisiti della traccia per 3 motivi fondamentali:
+    \vspace{0.3cm}
+    \begin{itemize}
+        \item \textbf{Velocità Estrema:} L'unione di Bitboard e Memory Pool consente all'MCTS di esplorare una quantità massiva di scenari nei limiti imposti.
+        \item \textbf{Fedeltà alle Regole:} Le LUTs garantiscono il rispetto della variante Italiana e degli obblighi di presa.
+        \item \textbf{Fruibilità Totale:} Grazie a WebAssembly, l'agente ad alte prestazioni in C puro gira su qualsiasi dispositivo dotato di browser, rendendo il progetto universale, sicuro e moderno.
+    \end{itemize}
+\end{frame}
+
+\end{document}

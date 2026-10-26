@@ -13,6 +13,7 @@
  * @param time_limit_sec Tempo limite in secondi (es. 0.2, 1.0, 3.0 richiesti dal progetto).
  * @param policy Politica di esplorazione da utilizzare (UCB1 o PUCT).
  * @param exploration_constant La costante 'c' di esplorazione (es. 1.414).
+ * @param rollout_cutoff Limite massimo di semimosse nel rollout (0 per default/illimitato).
  * @param out_best_move Puntatore dove salvare la mossa migliore trovata (parametro di output).
  * @return Numero di iterazioni (rollouts completi) eseguiti nel tempo a disposizione.
  */
@@ -22,6 +23,7 @@ uint32_t mcts_get_best_move_anytime(
     double time_limit_sec, 
     SelectionPolicy policy, 
     float exploration_constant,
+    int rollout_cutoff,
     Move* out_best_move
 );
 

@@ -1,0 +1,29 @@
+{
+  "num_games": 200,
+  "best_arm": {
+    "id": "Arm_1",
+    "c": 0.8,
+    "cutoff": 30,
+    "label": "(α=0.8,  cutoff=30)",
+    "policy": 0
+  },
+  "runner_up": {
+    "id": "Arm_2",
+    "c": 1.0,
+    "cutoff": 40,
+    "label": "(α=1.0,  cutoff=40)",
+    "policy": 0
+  },
+  "wins": 60,
+  "draws": 125,
+  "losses": 15,
+  "total_score": 122.5,
+  "win_rate_pct": 61.25,
+  "ci_95_lower": 54.35,
+  "ci_95_upper": 67.73,
+  "z_score": 3.182,
+  "p_value_one_tailed": 0.00073136,
+  "p_value_two_tailed": 0.0014627,
+  "statistically_significant": true,
+  "trajectory": []
+}

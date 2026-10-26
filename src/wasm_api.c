@@ -90,7 +90,7 @@ int play_human_move(int from, int to) {
 EMSCRIPTEN_KEEPALIVE
 int play_bot_move(double time_limit, int policy, float exploration_c) {
     Move best_move;
-    mcts_get_best_move_anytime(&g_board, g_player, time_limit, (SelectionPolicy)policy, exploration_c, &best_move);
+    mcts_get_best_move_anytime(&g_board, g_player, time_limit, (SelectionPolicy)policy, exploration_c, 80, &best_move);
     
     int caps = __builtin_popcount(best_move.captured_men | best_move.captured_kings);
     
