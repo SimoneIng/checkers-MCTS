@@ -373,18 +373,25 @@ if (current_player == 0) { // 0 = Turno del Nero
 
 
 \begin{frame}{Tuning degli Iperparametri}
-    Il Tuning degli iperparametri è stato formulato come un problema di \textbf{Best Arm Identification (BAI)}:
+    Il Tuning degli iperparametri è stato formulato come un problema di \textbf{Best Arm Identification (BAI)} disaccoppiato sulle due policy:
     
-    \vspace{0.2cm}
-    \textbf{Algoritmo Successive Rejects ($T = 400$ partite):}
-    \begin{itemize}
-        \item Spazio di ricerca formato da coppie $(\alpha, \text{cutoff})$.
-        \item Ad ogni fase, tutti i bracci attivi disputano partite a colori alternati (50\% Bianco, 50\% Nero).
-        \item Il braccio con la peggior media empirica $\hat{\mu}_i$ viene eliminato definitivamente.
-        \item I finalisti arrivano a disputare \textbf{oltre 100 partite ciascuno}, per assicuraci che la dominanza di uno sull'altro non sia frutto del "caso" ma abbia una solida base statistica.
-    \end{itemize}
+    \vspace{0.15cm}
+    \textbf{Pipeline Sperimentale in 3 Step:}
+    \begin{enumerate}
+        \item \textbf{Torneo 1 (UCB1):} Successive Rejects ($T = 400$) sulle coppie $(\alpha, \text{cutoff})$.
+        \item \textbf{Torneo 2 (PUCT):} Successive Rejects ($T = 400$) sulle coppie $(C, \text{cutoff})$.
+        \item \textbf{Showdown Finale:} Scontro diretto tra il Campione UCB1 e il Campione PUCT.
+    \end{enumerate}
+
     \vspace{0.1cm}
-    \textbf{Giustificazione Teorica del Budget ($H_2$):} Con $T=400$, il bound formale di Audibert et al. garantisce che il rischio d'errore $P(\text{err}) \le \frac{K(K-1)}{2} \exp\left(-\frac{T-K}{\overline{\log}(K) H_2}\right)$ sia rigorosamente controllato.
+    \textbf{Protocollo Successive Rejects ($T = 400$ partite per torneo):}
+    \begin{itemize}
+        \item Ad ogni fase, i bracci attivi giocano a colori alternati (50\% Bianco, 50\% Nero) e il peggiore per media empirica $\hat{\mu}_i$ viene eliminato.
+        \item I finalisti disputano \textbf{oltre 100 partite ciascuno} per abbattere la varianza campionaria.
+    \end{itemize}
+    \vspace{0.05cm}
+    \footnotesize
+    \textbf{Bound Teorico ($H_2$):} Con $T=400$, il limite di Audibert et al. controlla rigorosamente $P(\text{err}) \le \frac{K(K-1)}{2} \exp\left(-\frac{T-K}{\overline{\log}(K) H_2}\right)$.
 \end{frame}
 
 \begin{frame}{Approfondimento: Complessità $H_2$ e Bound del Budget}
@@ -409,46 +416,70 @@ if (current_player == 0) { // 0 = Turno del Nero
     $\implies$ Non abbiamo scelto 400 a caso: la teoria dei Banditi garantisce matematicamente che 400 partite bastano ad abbattere il rischio d'errore sui gap $\Delta$ osservati.
 \end{frame}
 
-\begin{frame}{Esecuzione Sperimentale Successive Rejects ($T=400$)}
-    Allocazione progressiva delle partite ($K=6$ bracci):
+\begin{frame}{Torneo 1: Successive Rejects — Policy UCB1 ($T=400$)}
+    Allocazione progressiva delle partite per la policy \textbf{UCB1} ($K=6$ bracci):
     
     \vspace{0.2cm}
     \centering
     \small
     \begin{tabular}{lcccccl}
         \toprule
-        \textbf{Braccio} & \textbf{Parametri} & \textbf{Match} & \textbf{Punti} & \textbf{Win Rate} & \textbf{Esito} \\
+        \textbf{Braccio} & \textbf{Parametri UCB1} & \textbf{Match} & \textbf{Punti} & \textbf{Win Rate} & \textbf{Esito} \\
         \midrule
         \textbf{Arm\_1} & $\alpha = \mathbf{0.8}, \text{cut} = \mathbf{30}$ & \textbf{104} & \textbf{61.5} & \textbf{59.13\%} & \textbf{BEST ARM} \\
-        \textbf{Arm\_2} & $\alpha = 1.0, \text{cut} = 40$ & 104 & 60.5 & 58.17\% & Runner-Up \\
-        \textbf{Arm\_3} & $\alpha = 1.41, \text{cut} = 30$ & 70 & 36.5 & 52.14\% & Eliminato \\
-        \textbf{Arm\_6} & $\alpha = 2.2, \text{cut} = 50$ & 52 & 25.5 & 49.04\% & Eliminato \\
-        \textbf{Arm\_5} & $\alpha = 1.8, \text{cut} = 40$ & 42 & 19.0 & 45.24\% & Eliminato \\
-        \textbf{Arm\_4} & $\alpha = 1.41, \text{cut} = 50$ & 34 & - & < 45\% & Eliminato \\
+        \textbf{Arm\_2} & $\alpha = 1.0, \text{cut} = 40$ & 104 & 60.5 & 58.17\% & Runner-Up (Fase 5) \\
+        \textbf{Arm\_3} & $\alpha = 1.41, \text{cut} = 30$ & 70 & 36.5 & 52.14\% & Eliminato (Fase 4) \\
+        \textbf{Arm\_6} & $\alpha = 2.2, \text{cut} = 50$ & 52 & 25.5 & 49.04\% & Eliminato (Fase 3) \\
+        \textbf{Arm\_5} & $\alpha = 1.8, \text{cut} = 40$ & 42 & 19.0 & 45.24\% & Eliminato (Fase 2) \\
+        \textbf{Arm\_4} & $\alpha = 1.41, \text{cut} = 50$ & 34 & 14.0 & 41.18\% & Eliminato (Fase 1) \\
         \bottomrule
     \end{tabular}
     
     \vspace{0.3cm}
     \raggedright
     \footnotesize
-    \textbf{Efficienza del Metodo:} I bracci deboli giocano solo 34--42 partite; i due contendenti finalisti disputano 104 partite ciascuno per massimizzare la precisione statistica dove il margine è più sottile.
+    \textbf{Efficienza del Metodo:} I bracci con esplorazione eccessiva ($\alpha \ge 1.8$) o cutoff dispersivo vengono scartati rapidamente; i due finalisti disputano 104 partite ciascuno.
 \end{frame}
+
+\begin{frame}{Torneo 2: Successive Rejects — Policy PUCT ($T=400$)}
+    Allocazione progressiva delle partite per la policy \textbf{PUCT} ($K=6$ bracci):
+    
+    \vspace{0.2cm}
+    \centering
+    \small
+    \begin{tabular}{lcccccl}
+        \toprule
+        \textbf{Braccio} & \textbf{Parametri PUCT} & \textbf{Match} & \textbf{Punti} & \textbf{Win Rate} & \textbf{Esito} \\
+        \midrule
+        \textbf{Arm\_1} & $C = \mathbf{0.8}, \text{cut} = \mathbf{30}$ & \textbf{104} & \textbf{69.0} & \textbf{66.35\%} & \textbf{BEST ARM} \\
+        \textbf{Arm\_2} & $C = 1.0, \text{cut} = 40$ & 104 & 61.5 & 59.13\% & Runner-Up (Fase 5) \\
+        \textbf{Arm\_3} & $C = 1.41, \text{cut} = 40$ & 70 & 38.5 & 55.00\% & Eliminato (Fase 4) \\
+        \textbf{Arm\_5} & $C = 1.8, \text{cut} = 40$ & 52 & 25.0 & 48.08\% & Eliminato (Fase 3) \\
+        \textbf{Arm\_4} & $C = 1.5, \text{cut} = 60$ & 42 & 18.0 & 42.86\% & Eliminato (Fase 2) \\
+        \textbf{Arm\_6} & $C = 2.2, \text{cut} = 50$ & 34 & 12.5 & 36.76\% & Eliminato (Fase 1) \\
+        \bottomrule
+    \end{tabular}
+    
+    \vspace{0.3cm}
+    \raggedright
+    \footnotesize
+    \textbf{Cross-Validation Empirica:} Anche per PUCT, in modo totalmente indipendente, trionfa la medesima configurazione $(C=0.8, \text{cutoff}=30)$, confermando che questo punto rappresenta l'ottimo strutturale per la Dama Italiana.
+\end{frame}
+
+
 
 \begin{frame}{Convergenza Statistica e Solidità dei Risultati}
     \textbf{Il Principio alla Base: La Legge dei Grandi Numeri}
     \begin{itemize}
         \item In un gioco stocastico, un campione ridotto ($n < 20$ match) è dominato dal \textbf{rumore statistico}: una vittoria può dipendere dal caso.
-        \item All'aumentare del numero di partite ($n > 100$), la media empirica dei punteggi si stabilizza e \textbf{converge al   
-reale valore di forza} della configurazione.
+        \item All'aumentare del numero di partite ($n > 100$), la media empirica dei punteggi si stabilizza e \textbf{converge al reale valore di forza} della configurazione.
     \end{itemize}
 
     \vspace{0.25cm}
     \textbf{Come l'Algoritmo Garantisce la Convergenza Finale:}
     \begin{itemize}
-        \item \textbf{Allocazione Progressiva:} Il Successive Rejects elimina tempestivamente i bracci deboli e concentra il budget 
-sulle configurazioni più competitive.
-        \item \textbf{Abbattimento della Varianza:} I due bracci finalisti arrivano a disputare \textbf{104 partite ciascuno}.      
-L'errore casuale viene neutralizzato proprio dove i margini di distacco sono più sottili.
+        \item \textbf{Allocazione Progressiva:} Il Successive Rejects elimina tempestivamente i bracci deboli e concentra il budget sulle configurazioni più competitive.
+        \item \textbf{Abbattimento della Varianza:} I due bracci finalisti arrivano a disputare \textbf{104 partite ciascuno}. L'errore casuale viene neutralizzato proprio dove i margini di distacco sono più sottili.
     \end{itemize}
 
     \vspace{0.25cm}
@@ -458,15 +489,15 @@ L'errore casuale viene neutralizzato proprio dove i margini di distacco sono pi�
     \end{itemize}
 \end{frame}
 
-\begin{frame}{Validazione Out-of-Sample: Il Torneo di Sfruttamento}
+\begin{frame}{Validazione Out-of-Sample: Il Torneo di Sfruttamento (UCB1)}
     \textbf{Obiettivo del Test:}
-    Verificare le prestazioni fuori dal Successive Rejects per escludere qualsiasi condizionamento dell'algoritmo di selezione.
+    Verificare fuori dal Successive Rejects la superiorità del campione assoluto eletto (\textbf{UCB1}), escludendo qualsiasi bias di selezione.
     
     \vspace{0.15cm}
-    \textbf{Setup del Match (200 Partite Dirette):}
+    \textbf{Setup del Match (200 Partite Dirette — Policy UCB1):}
     \begin{itemize}
-        \item \textbf{Campione:} \texttt{Arm\_1} ($\alpha=0.8, \text{cutoff}=30$).
-        \item \textbf{Sfidante:} \texttt{Arm\_2} ($\alpha=1.0, \text{cutoff}=40$).
+        \item \textbf{Campione:} \texttt{Arm\_1} ($\text{UCB1}, \alpha=0.8, \text{cutoff}=30$).
+        \item \textbf{Sfidante:} \texttt{Arm\_2} ($\text{UCB1}, \alpha=1.0, \text{cutoff}=40$).
         \item \textbf{Simmetria Totale:} 100 partite col Bianco, 100 col Nero.
     \end{itemize}
     
@@ -490,7 +521,6 @@ L'errore casuale viene neutralizzato proprio dove i margini di distacco sono pi�
     \begin{itemize}
         \item Sostituendo i valori osservati ($122.5/200$), otteniamo l'intervallo:
         $$\mathbf{IC_{95\%} = [54.35\%, \; 67.73\%]}$$
-        \item \textbf{Perché Wilson e non Wald:} A differenza dell'approssimazione normale classica ($\hat{p} \pm z\sigma$), Wilson è affidabile su campioni finiti e asimmetrici, evitando distorsioni o sovrastime.
     \end{itemize}
 
     \vspace{0.15cm}
@@ -522,7 +552,33 @@ L'errore casuale viene neutralizzato proprio dove i margini di distacco sono pi�
     \textbf{3. Calcolo del p-value:}
     $$p = P(Z \ge 3.182) = \mathbf{7.31 \times 10^{-4}} \ll 0.05 \quad (\approx \mathbf{0.07\%})$$
     \footnotesize
-    $\implies$ C'è meno dello \textbf{0.07\%} di probabilità che questo scarto sia frutto della fortuna. L'ipotesi nulla $H_0$ è formalmente respinta: la superiorità è reale con oltre il \textbf{99.9\% di confidenza}.
+    $\implies$ C'è meno dello \textbf{0.07\%} di probabilità che questo scarto sia frutto della fortuna. L'ipotesi nulla $H_0$ è formalmente respinta: la superiorità è reale.
+\end{frame}
+
+
+\begin{frame}{Showdown Finale: Campione UCB1 vs Campione PUCT}
+    Per eleggere la policy regina da assegnare al livello massimo, i due vincitori si sono affrontati in uno scontro diretto:
+    
+    \vspace{0.2cm}
+    \begin{itemize}
+        \item \textbf{Sfidante 1 (Campione UCB1):} $\alpha = 0.8, \; \text{cutoff} = 30$
+        \item \textbf{Sfidante 2 (Campione PUCT):} $C = 0.8, \; \text{cutoff} = 30$
+        \item \textbf{Protocollo:} \textbf{100 match} head-to-head a colori alternati (50 Bianco, 50 Nero) con limite $0.02\text{s}$/mossa.
+    \end{itemize}
+
+    \vspace{0.2cm}
+    \begin{block}{Risultato dello Showdown (100 Partite): Dominio UCB1}
+        \centering
+        \textbf{Vittorie UCB1: 28 (28\%)} \quad | \quad \textbf{Patte: 65 (65\%)} \quad | \quad \textbf{Vittorie PUCT: 7 (7\%)} \\
+        \vspace{0.1cm}
+        Punteggio Complessivo: \textbf{60.5 / 100 (60.50\%)} --- $p\text{-value} < 0.02$ \\
+        \vspace{0.05cm}
+        $\implies$ \textbf{Vincitore Assoluto: Policy UCB1 ($\alpha = 0.8, \text{cutoff} = 30$)}
+    \end{block}
+
+    \vspace{0.15cm}
+    \footnotesize
+    \textbf{Interpretazione Teorica:} Il decadimento rapido $1/(1+N_i)$ di PUCT pota troppo aggressivamente alcuni rami tattici; l'esplorazione logaritmica di \textbf{UCB1} garantisce invece maggiore copertura contro le catture forzate (vincendo il \textbf{400\%} di partite decisive in più: 28 a 7).
 \end{frame}
 
 \begin{frame}{Configurazione Finale dei Livelli di Difficoltà}

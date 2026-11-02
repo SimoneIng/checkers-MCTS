@@ -57,7 +57,7 @@ def play_showdown_match(idx, ucb1_res, puct_res, time_limit, seed):
     else:
         return idx, "DRAW", "Patta"
 
-def main(num_games=20, time_limit=0.03, workers=4):
+def main(num_games=100, time_limit=0.03, workers=4):
     if not os.path.exists(UCB1_FILE) or not os.path.exists(PUCT_FILE):
         print(f"Errore: Esegui prima 'python3 tune_ucb1.py' e 'python3 tune_puct.py' per estrarre i campioni.", file=sys.stderr)
         sys.exit(1)
