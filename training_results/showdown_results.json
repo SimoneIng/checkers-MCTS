@@ -11,9 +11,9 @@
     "cutoff": 30,
     "label": "(C=0.8,  cutoff=30)"
   },
-  "games_played": 20,
-  "ucb1_wins": 4,
-  "puct_wins": 3,
-  "draws": 13,
+  "games_played": 100,
+  "ucb1_wins": 28,
+  "puct_wins": 7,
+  "draws": 65,
   "winner": "UCB1"
 }
